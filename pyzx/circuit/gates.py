@@ -929,16 +929,88 @@ class MCZ(Gate):
             q_mapper.next_row(self.target),
             *map(q_mapper.next_row, self.ctrls),
         )
-        qmin = min(self.target, *self.ctrls)
         t = self.graph_add_node(g, q_mapper, VertexType.Z, self.target, r)
         cs = [
             self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
             for ctrl in self.ctrls
         ]
-        h = g.add_vertex(VertexType.H_BOX, qmin + 0.5, r + 0.5)
+        h = g.add_vertex(VertexType.H_BOX, self.target - 0.5, r + 0.5)
         g.add_edge((t, h), EdgeType.SIMPLE)
         for c in cs:
             g.add_edge((c, h), EdgeType.SIMPLE)
+        q_mapper.set_next_row(self.target, r + 1)
+        for c in self.ctrls:
+            q_mapper.set_next_row(c, r + 1)
+
+    def to_quipper(self) -> str:
+        return (
+            f'QGate["{self.quipper_name}"({self.target})]'
+            + f" with controls=[{','.join(f'+{c}' for c in self.ctrls)}]"
+            + " with nocontrol"
+        )
+
+
+class MCX(Gate):
+    name = "MCX"
+    qasm_name = "x"
+    qc_name = "Z"
+    quipper_name = "not"
+
+    def __init__(self, ctrls: list[int], target: int):
+        self.target = target
+        self.ctrls = ctrls
+
+    def __str__(self) -> str:
+        controls = [f"c{i}={s}" for i, s in enumerate(self.ctrls)]
+        return f"{self.name}({','.join(controls)},t={self.target})"
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, MCX)
+            and self.target == other.target
+            and {*self.ctrls} == {*other.ctrls}
+        )
+
+    def _max_target(self) -> int:
+        return max(self.target, *self.ctrls)
+
+    def reposition(self, mask: list[int], bit_mask: list[int] | None = None) -> "MCX":
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrls = [mask[ctrl] for ctrl in g.ctrls]
+        return g
+
+    def to_basic_gates(self) -> list[Gate]:
+        raise Exception(f"{__name__} not implemented for {type(self).__name__}")
+
+    def to_graph(
+        self,
+        g: BaseGraph[VT, ET],
+        q_mapper: TargetMapper[VT],
+        c_mapper: TargetMapper[VT],
+    ) -> None:
+        # if basic_gates:
+        #     for gate in self.to_basic_gates():
+        #         gate.to_graph(g, q_mapper, c_mapper)
+        # else:
+        r = max(
+            q_mapper.next_row(self.target),
+            *map(q_mapper.next_row, self.ctrls),
+        )
+        t = self.graph_add_node(g, q_mapper, VertexType.Z, self.target, r)
+        cs = [
+            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
+            for ctrl in self.ctrls
+        ]
+        h_c = g.add_vertex(VertexType.H_BOX, self.target - 0.5, r + 0.5)
+        h = g.add_vertex(VertexType.H_BOX, self.target - 0.25, r + 0.25)
+
+        g.add_edge((h, h_c), EdgeType.SIMPLE)
+
+        g.add_edge((t, h), EdgeType.SIMPLE)
+
+        for c in cs:
+            g.add_edge((c, h_c), EdgeType.SIMPLE)
         q_mapper.set_next_row(self.target, r + 1)
         for c in self.ctrls:
             q_mapper.set_next_row(c, r + 1)

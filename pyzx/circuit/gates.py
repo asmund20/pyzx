@@ -961,7 +961,10 @@ class MCZWithHadPhase(MCGate):
             q_mapper.set_next_row(c, r + 1)
 
 
-class MCZ(MCGate):
+class MCZ(MCZWithHadPhase):
+    def __init__(self, ctrls: list[int], target: int):
+        super().__init__(ctrls, target, 1)
+
     def to_quipper(self) -> str:
         return (
             f'QGate["{self.quipper_name}"({self.target})]'

@@ -999,7 +999,7 @@ class MCX(MCGate):
             q_mapper.next_row(self.target),
             *map(q_mapper.next_row, self.ctrls),
         )
-        t = self.graph_add_node(g, q_mapper, VertexType.Z, self.target, r)
+        t = self.graph_add_node(g, q_mapper, VertexType.X, self.target, r)
         cs = [
             self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
             for ctrl in self.ctrls

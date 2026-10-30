@@ -1348,9 +1348,6 @@ class ParityPhase(Gate):
         return cnots + [p] + list(reversed(cnots))
 
     def to_basic_gates(self) -> list[Gate]:
-        if self.as_gadget:
-            # Keep as-is so to_graph() can create the phase gadget structure.
-            return [self]
         return self._decompose_cnots()
 
     def _export_via_cnots(self, export_attr: str) -> str:
@@ -1387,6 +1384,7 @@ class ParityPhase(Gate):
                 anchors.append(v)
                 q_mapper.advance_next_row(t)
             g.add_phase_gadget(self.phase, anchors)
+            g.scalar.add_power(len(self.targets) - 1)
         else:
             # Decompose to CNOTs + ZPhase.
             for gate in self.to_basic_gates():

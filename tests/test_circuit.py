@@ -31,7 +31,7 @@ from pyzx.generate import cliffordT, cliffords
 from pyzx.simplify import clifford_simp
 from pyzx.extract import extract_circuit
 from pyzx.circuit import Circuit, PhaseGadget
-from pyzx.circuit.gates import ParityPhase, FSim, U2, U3, CU3, CU, CSX, RZZ
+from pyzx.circuit.gates import ParityPhase, FSim, U2, U3, CU3, CU, CSX, RZZ, CNOT, ZPhase
 from pyzx.utils import VertexType, EdgeType
 from fractions import Fraction
 
@@ -320,15 +320,20 @@ class TestPhaseGadgetGate(unittest.TestCase):
         self.assertTrue(compare_tensors(c.to_tensor(), c2.to_tensor(), False))
 
     def test_gadget_vs_basic_gates_semantics(self):
-        # ParityPhase with as_gadget=True and as_gadget=False should have the same semantics.
-        c_gadget = Circuit(3)
-        c_gadget.add_gate(ParityPhase(Fraction(1, 4), 0, 1, 2, as_gadget=True))
+        # ParityPhase with as_gadget=True and as_gadget=False should have the exact same semantics including scalar.
+        for k in (1, 2, 3, 4):
+            for phase in (0, Fraction(1, 4), Fraction(1, 2), Fraction(3, 4), 1):
+                c_gadget = Circuit(k)
+                c_gadget.add_gate(ParityPhase(phase, *range(k), as_gadget=True))
 
-        c_basic = Circuit(3)
-        c_basic.add_gate(ParityPhase(Fraction(1, 4), 0, 1, 2, as_gadget=False))
+                c_basic = Circuit(k)
+                c_basic.add_gate(ParityPhase(phase, *range(k), as_gadget=False))
 
-        # The tensors should be equivalent.
-        self.assertTrue(compare_tensors(c_gadget.to_tensor(), c_basic.to_tensor(), False))
+                # Tensors must match with scalar preserved.
+                self.assertTrue(compare_tensors(c_gadget.to_tensor(), c_basic.to_tensor(), True))
+                # The gate must be strictly unitary.
+                m = c_gadget.to_matrix()
+                self.assertTrue(np.allclose(m @ m.conj().T, np.eye(2**k)))
 
     def test_parity_phase_copy_preserves_as_gadget(self):
         pp = ParityPhase(Fraction(1, 4), 0, 1, 2, as_gadget=True)
@@ -375,6 +380,35 @@ class TestPhaseGadgetGate(unittest.TestCase):
         self.assertIn("rz(0.25*pi) q[2];", qasm)
         self.assertNotIn("undefined", c.to_qc())
         self.assertNotIn("undefined", c.to_quipper())
+
+    def test_phase_gadget_to_basic_gates(self):
+        pg = PhaseGadget(Fraction(1, 4), 0, 1)
+        bg = pg.to_basic_gates()
+        self.assertEqual(bg, [CNOT(0, 1), ZPhase(1, Fraction(1, 4)), CNOT(0, 1)])
+        for b in bg:
+            self.assertEqual(b.to_basic_gates(), [b])
+
+        c = Circuit(3)
+        c.add_gate(PhaseGadget(Fraction(1, 4), 0, 1, 2))
+        c_basic = c.to_basic_gates()
+        self.assertEqual(len(c_basic.gates), 5)  # 2 CNOTs + 1 ZPhase + 2 CNOTs
+        self.assertFalse(any(isinstance(g, ParityPhase) for g in c_basic.gates))
+        self.assertTrue(compare_tensors(c.to_tensor(), c_basic.to_tensor(), True))
+
+        # preserve_gadgets=True retains the PhaseGadget
+        c_pres = c.to_basic_gates(preserve_gadgets=True)
+        self.assertEqual(len(c_pres.gates), 1)
+        self.assertIsInstance(c_pres.gates[0], PhaseGadget)
+
+        # to_graph() still creates the native phase gadget structure in ZX-graph
+        g = c.to_graph()
+        leaf_candidates = [v for v in g.vertices()
+                           if g.type(v) == VertexType.Z
+                           and g.phase(v) == Fraction(1, 4)
+                           and g.vertex_degree(v) == 1]
+        self.assertEqual(len(leaf_candidates), 1)
+        hub = list(g.neighbors(leaf_candidates[0]))[0]
+        self.assertTrue(g.is_phase_gadget(hub))
 
     def test_rzz_gate_operations(self):
         rzz = RZZ(0, 1, Fraction(1, 4))
@@ -439,7 +473,7 @@ class TestPhaseGadgetGate(unittest.TestCase):
         c_pg = Circuit(3)
         c_pg.add_gate(PhaseGadget(Fraction(1, 4), 0, 1, 2))
         c_pg_rt = Circuit.from_qasm(c_pg.to_qasm())
-        self.assertTrue(compare_tensors(c_pg.to_tensor(), c_pg_rt.to_tensor(), False))
+        self.assertTrue(compare_tensors(c_pg.to_tensor(), c_pg_rt.to_tensor(), True))
 
         c_rzz = Circuit(2)
         c_rzz.add_gate(RZZ(0, 1, Fraction(1, 4)))

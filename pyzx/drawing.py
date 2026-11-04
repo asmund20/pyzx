@@ -190,7 +190,9 @@ def draw_matplotlib(
     h_edge_draw: Literal["blue", "box"] = "blue",
     show_scalar: bool = False,
     rows: tuple[FloatInt, FloatInt] | None = None,
-) -> Any:  # TODO: Returns a matplotlib figure
+    ax: Any | None = None,
+    show: bool = True,
+) -> None:
 
     # lazy import matplotlib
     global plt, path, patches, lines
@@ -208,7 +210,9 @@ def draw_matplotlib(
 
     if isinstance(g, Circuit):
         g = g.to_graph(zh=True)
-    fig1, ax = plt.subplots(figsize=figsize)
+
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
     ax.set_frame_on(False)
     ax.set(xlim=(0, 1), ylim=(0, 1))
     ax.xaxis.set_visible(False)
@@ -358,11 +362,11 @@ def draw_matplotlib(
             )
 
         if labels:
-            plt.text(
+            ax.text(
                 p[0] + 0.25, p[1] + 0.25, str(v), ha="center", color="gray", fontsize=5
             )
         if phase_str:
-            plt.text(
+            ax.text(
                 p[0], p[1] - a_offset, phase_str, ha="center", color="blue", fontsize=8
             )
 
@@ -372,12 +376,13 @@ def draw_matplotlib(
         ax.text(x - 5, y, g.scalar.to_latex())
 
     ax.axis("equal")
-    fig1.tight_layout()
-    if get_mode() == "shell":
+    plt.tight_layout()
+
+    mode = get_mode()
+    if mode == "shell" and show:
         plt.show()
-    else:
+    elif mode != "shell":
         plt.close()
-    return fig1
 
 
 # Provides functions for displaying pyzx graphs in jupyter notebooks using d3

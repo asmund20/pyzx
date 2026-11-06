@@ -884,22 +884,18 @@ class CZ(Gate):
 
 
 class MCGate(Gate):
-    def __init__(self, ctrls: list[int], target: int):
+    def __init__(
+        self,
+        target: int,
+        ctrls: list[int] | None = None,
+        classical_ctrls: list[int] | None = None,
+    ):
         self.target = target
         self.ctrls = ctrls
-
-    def __str__(self) -> str:
-        controls = [f"c{i}={s}" for i, s in enumerate(self.ctrls)]
-        return f"{self.name}({','.join(controls)},t={self.target})"
+        self.classical_ctrls = classical_ctrls
 
     def _max_target(self) -> int:
-        return max(self.target, *self.ctrls)
-
-    def to_basic_gates(self) -> list[Gate]:
-        raise Exception(f"{__name__} not implemented for {type(self).__name__}")
-
-    def to_quipper(self) -> str:
-        raise Exception(f"{__name__} not implemented for {type(self).__name__}")
+        return max(self.target, *(self.ctrls or ()), *(self.classical_ctrls or ()))
 
 
 class MCZWithHadPhase(MCGate):
@@ -908,19 +904,26 @@ class MCZWithHadPhase(MCGate):
     qc_name = "Z"
     quipper_name = "Z"
 
-    def __init__(self, ctrls: list[int], target: int, hPhase: FractionLike):
-        super().__init__(ctrls, target)
+    def __init__(
+        self,
+        target: int,
+        hPhase: FractionLike,
+        ctrls: list[int] | None = None,
+        classical_ctrls: list[int] | None = None,
+    ):
+        super().__init__(target, ctrls=ctrls, classical_ctrls=classical_ctrls)
         self.hPhase: FractionLike = hPhase
 
     def __eq__(self, other: object) -> bool:
         return (
             isinstance(other, MCZWithHadPhase)
             and self.hPhase == other.hPhase
-            and {self.target, *self.ctrls}
+            and {self.target, *(self.ctrls or ())}
             == {
                 other.target,
-                *other.ctrls,
+                *(other.ctrls or ()),
             }
+            and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
     def reposition(
@@ -928,7 +931,14 @@ class MCZWithHadPhase(MCGate):
     ) -> "MCZWithHadPhase":
         g = self.copy()
         g.target = mask[g.target]
-        g.ctrls = [mask[ctrl] for ctrl in g.ctrls]
+        g.ctrls = (
+            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
+        )
+        g.classical_ctrls = (
+            [mask[ctrl] for ctrl in g.classical_ctrls]
+            if isinstance(g.classical_ctrls, list)
+            else g.classical_ctrls
+        )
         return g
 
     def to_graph(
@@ -937,40 +947,48 @@ class MCZWithHadPhase(MCGate):
         q_mapper: TargetMapper[VT],
         c_mapper: TargetMapper[VT],
     ) -> None:
-        # if basic_gates:
-        #     for gate in self.to_basic_gates():
-        #         gate.to_graph(g, q_mapper, c_mapper)
-        # else:
         r = max(
             q_mapper.next_row(self.target),
-            *map(q_mapper.next_row, self.ctrls),
+            *map(
+                q_mapper.next_row,
+                (*(self.ctrls or ()), *(self.classical_ctrls or ())),
+            ),
         )
         t = self.graph_add_node(g, q_mapper, VertexType.Z, self.target, r)
-        cs = [
-            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
-            for ctrl in self.ctrls
-        ]
         h = g.add_vertex(
             VertexType.H_BOX, self.target - 0.5, r + 0.5, phase=self.hPhase
         )
         g.add_edge((t, h), EdgeType.SIMPLE)
-        for c in cs:
+        cs = [
+            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
+            for ctrl in self.ctrls or ()
+        ]
+        classical_cs = [
+            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r, ground=True)
+            for ctrl in self.classical_ctrls or ()
+        ]
+
+        for c in cs or ():
             g.add_edge((c, h), EdgeType.SIMPLE)
+
+        for c in classical_cs or ():
+            g.add_edge((c, h), EdgeType.SIMPLE)
+
         q_mapper.set_next_row(self.target, r + 1)
-        for c in self.ctrls:
+        for c in self.ctrls or ():
+            q_mapper.set_next_row(c, r + 1)
+        for c in self.classical_ctrls or ():
             q_mapper.set_next_row(c, r + 1)
 
 
 class MCZ(MCZWithHadPhase):
-    def __init__(self, ctrls: list[int], target: int):
-        super().__init__(ctrls, target, 1)
-
-    def to_quipper(self) -> str:
-        return (
-            f'QGate["{self.quipper_name}"({self.target})]'
-            + f" with controls=[{','.join(f'+{c}' for c in self.ctrls)}]"
-            + " with nocontrol"
-        )
+    def __init__(
+        self,
+        target: int,
+        ctrls: list[int] | None = None,
+        classical_ctrls: list[int] | None = None,
+    ):
+        super().__init__(target, -1, ctrls=ctrls, classical_ctrls=classical_ctrls)
 
 
 class MCX(MCGate):
@@ -983,13 +1001,21 @@ class MCX(MCGate):
         return (
             isinstance(other, MCX)
             and self.target == other.target
-            and {*self.ctrls} == {*other.ctrls}
+            and {*(self.ctrls or ())} == {*(other.ctrls or ())}
+            and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
     def reposition(self, mask: list[int], bit_mask: list[int] | None = None) -> "MCX":
         g = self.copy()
         g.target = mask[g.target]
-        g.ctrls = [mask[ctrl] for ctrl in g.ctrls]
+        g.ctrls = (
+            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
+        )
+        g.classical_ctrls = (
+            [mask[ctrl] for ctrl in g.classical_ctrls]
+            if isinstance(g.classical_ctrls, list)
+            else g.classical_ctrls
+        )
         return g
 
     def to_graph(
@@ -1000,13 +1026,22 @@ class MCX(MCGate):
     ) -> None:
         r = max(
             q_mapper.next_row(self.target),
-            *map(q_mapper.next_row, self.ctrls),
+            *map(
+                q_mapper.next_row,
+                (*(self.ctrls or ()), *(self.classical_ctrls or ())),
+            ),
         )
+
         t = self.graph_add_node(g, q_mapper, VertexType.X, self.target, r)
         cs = [
             self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
-            for ctrl in self.ctrls
+            for ctrl in self.ctrls or ()
         ]
+        classical_cs = [
+            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r, ground=True)
+            for ctrl in self.classical_ctrls or ()
+        ]
+
         h_c = g.add_vertex(VertexType.H_BOX, self.target - 0.5, r + 0.5)
         h = g.add_vertex(VertexType.H_BOX, self.target - 0.25, r + 0.25)
 
@@ -1016,16 +1051,15 @@ class MCX(MCGate):
 
         for c in cs:
             g.add_edge((c, h_c), EdgeType.SIMPLE)
-        q_mapper.set_next_row(self.target, r + 1)
-        for c in self.ctrls:
-            q_mapper.set_next_row(c, r + 1)
 
-    def to_quipper(self) -> str:
-        return (
-            f'QGate["{self.quipper_name}"({self.target})]'
-            + f" with controls=[{','.join(f'+{c}' for c in self.ctrls)}]"
-            + " with nocontrol"
-        )
+        for c in classical_cs or ():
+            g.add_edge((c, h_c), EdgeType.SIMPLE)
+
+        q_mapper.set_next_row(self.target, r + 1)
+        for c in self.ctrls or ():
+            q_mapper.set_next_row(c, r + 1)
+        for c in self.classical_ctrls or ():
+            q_mapper.set_next_row(c, r + 1)
 
 
 class MCHAD(MCGate):
@@ -1038,13 +1072,21 @@ class MCHAD(MCGate):
         return (
             isinstance(other, MCHAD)
             and self.target == other.target
-            and {*self.ctrls} == {*other.ctrls}
+            and {*(self.ctrls or ())} == {*(other.ctrls or ())}
+            and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
     def reposition(self, mask: list[int], bit_mask: list[int] | None = None) -> "MCHAD":
         g = self.copy()
         g.target = mask[g.target]
-        g.ctrls = [mask[ctrl] for ctrl in g.ctrls]
+        g.ctrls = (
+            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
+        )
+        g.classical_ctrls = (
+            [mask[ctrl] for ctrl in g.classical_ctrls]
+            if isinstance(g.classical_ctrls, list)
+            else g.classical_ctrls
+        )
         return g
 
     def to_graph(
@@ -1054,26 +1096,28 @@ class MCHAD(MCGate):
         c_mapper: TargetMapper[VT],
     ) -> None:
         # Add multi-controlled X
-        MCX(self.ctrls, self.target).to_graph(g, q_mapper, c_mapper)
+        MCX(
+            self.target,
+            ctrls=self.ctrls,
+            classical_ctrls=self.classical_ctrls,
+        ).to_graph(g, q_mapper, c_mapper)
 
         # Add z-phase to control qubits
-        for control in self.ctrls:
+        for control in self.ctrls or ():
+            ZPhase(control, Fraction(-1, 4)).to_graph(g, q_mapper, c_mapper)
+        for control in self.classical_ctrls or ():
             ZPhase(control, Fraction(-1, 4)).to_graph(g, q_mapper, c_mapper)
 
         XPhase(self.target, Fraction(-1, 2)).to_graph(g, q_mapper, c_mapper)
 
         MCZWithHadPhase(
-            self.ctrls, self.target, Poly([(complex(0, 1), Term([]))])
+            self.target,
+            Poly([(complex(0, 1), Term([]))]),
+            ctrls=self.ctrls,
+            classical_ctrls=self.classical_ctrls,
         ).to_graph(g, q_mapper, c_mapper)
 
         XPhase(self.target, Fraction(1, 2)).to_graph(g, q_mapper, c_mapper)
-
-    def to_quipper(self) -> str:
-        return (
-            f'QGate["{self.quipper_name}"({self.target})]'
-            + f" with controls=[{','.join(f'+{c}' for c in self.ctrls)}]"
-            + " with nocontrol"
-        )
 
 
 class XCX(CZ):

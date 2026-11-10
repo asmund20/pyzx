@@ -905,6 +905,21 @@ class MCGate(Gate):
     def _max_target(self) -> int:
         return max(self.target, *(self.ctrls or ()), *(self.classical_ctrls or ()))
 
+    def reposition(
+        self, mask: list[int], bit_mask: list[int] | None = None
+    ) -> "MCGate":
+        g = self.copy()
+        g.target = mask[g.target]
+        g.ctrls = (
+            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
+        )
+        g.classical_ctrls = (
+            [mask[ctrl] for ctrl in g.classical_ctrls]
+            if isinstance(g.classical_ctrls, list)
+            else g.classical_ctrls
+        )
+        return g
+
 
 class MCZWithHadPhase(MCGate):
     name = "MCZ"
@@ -933,21 +948,6 @@ class MCZWithHadPhase(MCGate):
             }
             and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
-
-    def reposition(
-        self, mask: list[int], bit_mask: list[int] | None = None
-    ) -> "MCZWithHadPhase":
-        g = self.copy()
-        g.target = mask[g.target]
-        g.ctrls = (
-            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
-        )
-        g.classical_ctrls = (
-            [mask[ctrl] for ctrl in g.classical_ctrls]
-            if isinstance(g.classical_ctrls, list)
-            else g.classical_ctrls
-        )
-        return g
 
     def to_graph(
         self,
@@ -1013,19 +1013,6 @@ class MCX(MCGate):
             and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
-    def reposition(self, mask: list[int], bit_mask: list[int] | None = None) -> "MCX":
-        g = self.copy()
-        g.target = mask[g.target]
-        g.ctrls = (
-            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
-        )
-        g.classical_ctrls = (
-            [mask[ctrl] for ctrl in g.classical_ctrls]
-            if isinstance(g.classical_ctrls, list)
-            else g.classical_ctrls
-        )
-        return g
-
     def to_graph(
         self,
         g: BaseGraph[VT, ET],
@@ -1083,19 +1070,6 @@ class MCHAD(MCGate):
             and {*(self.ctrls or ())} == {*(other.ctrls or ())}
             and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
-
-    def reposition(self, mask: list[int], bit_mask: list[int] | None = None) -> "MCHAD":
-        g = self.copy()
-        g.target = mask[g.target]
-        g.ctrls = (
-            [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
-        )
-        g.classical_ctrls = (
-            [mask[ctrl] for ctrl in g.classical_ctrls]
-            if isinstance(g.classical_ctrls, list)
-            else g.classical_ctrls
-        )
-        return g
 
     def to_graph(
         self,

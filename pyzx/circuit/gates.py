@@ -894,6 +894,14 @@ class MCGate(Gate):
         self.ctrls = ctrls
         self.classical_ctrls = classical_ctrls
 
+        assert ctrls is None or target not in ctrls, (
+            f"Controlled gate: target {target} in controls {ctrls}"
+        )
+
+        assert classical_ctrls is None or target not in classical_ctrls, (
+            f"Controlled gate: target {target} in classical controls {classical_ctrls}"
+        )
+
     def _max_target(self) -> int:
         return max(self.target, *(self.ctrls or ()), *(self.classical_ctrls or ()))
 

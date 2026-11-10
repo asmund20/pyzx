@@ -413,6 +413,7 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
         phase: FractionLike | None = None,
         ground: bool = False,
         index: VT | None = None,
+        allow_complex_phase: bool = False,
     ) -> VT:
         """Add a single vertex to the graph and return its index.
         The optional parameters allow you to respectively set
@@ -432,7 +433,7 @@ class BaseGraph(Generic[VT, ET], metaclass=DocstringMeta):
                 phase = 0
         self.set_qubit(v, qubit)
         self.set_row(v, row)
-        self.set_phase(v, phase, ty == VertexType.H_BOX)
+        self.set_phase(v, phase, allow_complex_phase)
         if ground:
             self.set_ground(v, True)
         if self.track_phases:

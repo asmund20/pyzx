@@ -964,7 +964,11 @@ class MCZWithHadPhase(MCGate):
         )
         t = self.graph_add_node(g, q_mapper, VertexType.Z, self.target, r)
         h = g.add_vertex(
-            VertexType.H_BOX, self.target - 0.5, r + 0.5, phase=self.hPhase
+            VertexType.H_BOX,
+            self.target - 0.5,
+            r + 0.5,
+            phase=self.hPhase,
+            allow_complex_phase=True,
         )
         g.add_edge((t, h), EdgeType.SIMPLE)
         cs = [

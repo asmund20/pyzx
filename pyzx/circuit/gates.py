@@ -888,22 +888,16 @@ class MCGate(Gate):
         self,
         target: int,
         ctrls: list[int] | None = None,
-        classical_ctrls: list[int] | None = None,
     ):
         self.target = target
         self.ctrls = ctrls
-        self.classical_ctrls = classical_ctrls
 
         assert ctrls is None or target not in ctrls, (
             f"Controlled gate: target {target} in controls {ctrls}"
         )
 
-        assert classical_ctrls is None or target not in classical_ctrls, (
-            f"Controlled gate: target {target} in classical controls {classical_ctrls}"
-        )
-
     def _max_target(self) -> int:
-        return max(self.target, *(self.ctrls or ()), *(self.classical_ctrls or ()))
+        return max(self.target, *(self.ctrls or ()))
 
     def reposition(
         self, mask: list[int], bit_mask: list[int] | None = None
@@ -912,11 +906,6 @@ class MCGate(Gate):
         g.target = mask[g.target]
         g.ctrls = (
             [mask[ctrl] for ctrl in g.ctrls] if isinstance(g.ctrls, list) else g.ctrls
-        )
-        g.classical_ctrls = (
-            [mask[ctrl] for ctrl in g.classical_ctrls]
-            if isinstance(g.classical_ctrls, list)
-            else g.classical_ctrls
         )
         return g
 
@@ -932,9 +921,8 @@ class MCZWithHadPhase(MCGate):
         target: int,
         hPhase: FractionLike,
         ctrls: list[int] | None = None,
-        classical_ctrls: list[int] | None = None,
     ):
-        super().__init__(target, ctrls=ctrls, classical_ctrls=classical_ctrls)
+        super().__init__(target, ctrls=ctrls)
         self.hPhase: FractionLike = hPhase
 
     def __eq__(self, other: object) -> bool:
@@ -946,7 +934,6 @@ class MCZWithHadPhase(MCGate):
                 other.target,
                 *(other.ctrls or ()),
             }
-            and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
     def to_graph(
@@ -957,10 +944,7 @@ class MCZWithHadPhase(MCGate):
     ) -> None:
         r = max(
             q_mapper.next_row(self.target),
-            *map(
-                q_mapper.next_row,
-                (*(self.ctrls or ()), *(self.classical_ctrls or ())),
-            ),
+            *map(q_mapper.next_row, self.ctrls or ()),
         )
         t = self.graph_add_node(g, q_mapper, VertexType.Z, self.target, r)
         h = g.add_vertex(
@@ -975,21 +959,12 @@ class MCZWithHadPhase(MCGate):
             self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
             for ctrl in self.ctrls or ()
         ]
-        classical_cs = [
-            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r, ground=True)
-            for ctrl in self.classical_ctrls or ()
-        ]
 
         for c in cs or ():
             g.add_edge((c, h), EdgeType.SIMPLE)
 
-        for c in classical_cs or ():
-            g.add_edge((c, h), EdgeType.SIMPLE)
-
         q_mapper.set_next_row(self.target, r + 1)
         for c in self.ctrls or ():
-            q_mapper.set_next_row(c, r + 1)
-        for c in self.classical_ctrls or ():
             q_mapper.set_next_row(c, r + 1)
 
 
@@ -1000,7 +975,7 @@ class MCZ(MCZWithHadPhase):
         ctrls: list[int] | None = None,
         classical_ctrls: list[int] | None = None,
     ):
-        super().__init__(target, -1, ctrls=ctrls, classical_ctrls=classical_ctrls)
+        super().__init__(target, -1, ctrls=ctrls)
 
 
 class MCX(MCGate):
@@ -1014,7 +989,6 @@ class MCX(MCGate):
             isinstance(other, MCX)
             and self.target == other.target
             and {*(self.ctrls or ())} == {*(other.ctrls or ())}
-            and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
     def to_graph(
@@ -1025,20 +999,13 @@ class MCX(MCGate):
     ) -> None:
         r = max(
             q_mapper.next_row(self.target),
-            *map(
-                q_mapper.next_row,
-                (*(self.ctrls or ()), *(self.classical_ctrls or ())),
-            ),
+            *map(q_mapper.next_row, self.ctrls or ()),
         )
 
         t = self.graph_add_node(g, q_mapper, VertexType.X, self.target, r)
         cs = [
             self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r)
             for ctrl in self.ctrls or ()
-        ]
-        classical_cs = [
-            self.graph_add_node(g, q_mapper, VertexType.Z, ctrl, r, ground=True)
-            for ctrl in self.classical_ctrls or ()
         ]
 
         h_c = g.add_vertex(VertexType.H_BOX, self.target - 0.5, r + 0.5)
@@ -1051,13 +1018,8 @@ class MCX(MCGate):
         for c in cs:
             g.add_edge((c, h_c), EdgeType.SIMPLE)
 
-        for c in classical_cs or ():
-            g.add_edge((c, h_c), EdgeType.SIMPLE)
-
         q_mapper.set_next_row(self.target, r + 1)
         for c in self.ctrls or ():
-            q_mapper.set_next_row(c, r + 1)
-        for c in self.classical_ctrls or ():
             q_mapper.set_next_row(c, r + 1)
 
 
@@ -1072,7 +1034,6 @@ class MCHAD(MCGate):
             isinstance(other, MCHAD)
             and self.target == other.target
             and {*(self.ctrls or ())} == {*(other.ctrls or ())}
-            and {*(self.classical_ctrls or ())} == {*(other.classical_ctrls or ())}
         )
 
     def to_graph(
@@ -1085,13 +1046,10 @@ class MCHAD(MCGate):
         MCX(
             self.target,
             ctrls=self.ctrls,
-            classical_ctrls=self.classical_ctrls,
         ).to_graph(g, q_mapper, c_mapper)
 
         # Add z-phase to control qubits
         for control in self.ctrls or ():
-            ZPhase(control, Fraction(-1, 4)).to_graph(g, q_mapper, c_mapper)
-        for control in self.classical_ctrls or ():
             ZPhase(control, Fraction(-1, 4)).to_graph(g, q_mapper, c_mapper)
 
         XPhase(self.target, Fraction(-1, 2)).to_graph(g, q_mapper, c_mapper)
@@ -1100,7 +1058,6 @@ class MCHAD(MCGate):
             self.target,
             Poly([(complex(0, 1), Term([]))]),
             ctrls=self.ctrls,
-            classical_ctrls=self.classical_ctrls,
         ).to_graph(g, q_mapper, c_mapper)
 
         XPhase(self.target, Fraction(1, 2)).to_graph(g, q_mapper, c_mapper)
